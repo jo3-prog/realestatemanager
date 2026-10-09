@@ -17,7 +17,7 @@ class Command(BaseCommand):
             return 
 
         User = get_user_model()
-        if User.objects.filter(email_isexact=email).exists():
+        if User.objects.filter(email__iexact=email).exists():
             self.stdout.write(f"Admin user with email {email} already exists; skipping creation.")
 
         # pick a username that doesn't exist yet (username must be unique)
