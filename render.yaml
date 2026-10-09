@@ -1,0 +1,41 @@
+# Render "Blueprint": describes the whole setup so Render can create it in one click.
+databases:
+  - name: realestate-db
+    plan: free              # free Postgres EXPIRES after 30 days (see docs/DEPLOY_RENDER.md)
+    region: frankfurt       # closest Render region to Nigeria; must match the web service
+    databaseName: realestate
+    user: realestate
+
+services:
+  - type: web
+    name: realestate-api
+    runtime: python
+    plan: free              # spins down after 15 min idle; first request then takes ~1 min
+    region: frankfurt
+    buildCommand: bash build.sh
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true        # Render invents a long random secret for you
+      - key: DATABASE_URL
+        fromDatabase:
+          name: realestate-db
+          property: connectionString
+      # ---- you fill these in on the Render dashboard (sync: false = ask me) ----
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
+      - key: CLOUDINARY_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false

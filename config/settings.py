@@ -1,11 +1,3 @@
-"""
-Project settings.
-
-settings.py is the "control panel" of a Django project. Every important
-decision (which apps are installed, which database to use, how login works)
-lives here. Secrets and things that change between your laptop and a real
-server are read from environment variables (see .env.example).
-"""
 import os
 import sys
 from datetime import timedelta
@@ -22,7 +14,12 @@ def env(name, default=None):
 SECRET_KEY = env("SECRET_KEY", "dev-only-insecure-key-change-me")
 DEBUG = env("DEBUG", "True") == "True"
 ALLOWED_HOSTS = env("ALLOWED_HOSTS", "127.0.0.1,localhost,testserver").split(",")
+RENDER_HOST = env("RENDER_EXTERNAL_HOSTNAME", None)  # used in production on Render.com
+if RENDER_HOST:
+    ALLOWED_HOSTS.append(RENDER_HOST)  # add the Render hostname to allowed hosts
 TESTING = "test" in sys.argv  # True when running `python manage.py test`
+
+USE_CLOUDINARY = bool(env("CLOUDINARY_URL"))
 
 INSTALLED_APPS = [
     # Built into Django
@@ -48,6 +45,9 @@ INSTALLED_APPS = [
     "notifications",
     "analytics",
 ]
+if USE_CLOUDINARY:
+    # used only when cloudinary url is set: images go to cloudinary
+    INSTALLED_APPS += ["cloudinary_storage", "cloudinary"]
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",  # must be near the top
@@ -79,10 +79,16 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-# ---------------------------------------------------------------- Database
+# Database... 
 # SQLite needs no setup (perfect for development). To use PostgreSQL set
 # DB_ENGINE=postgres and the DB_* variables in your .env file.
-if env("DB_ENGINE") == "postgres":
+if env ("DATABASE_URL"): 
+    import dj_database_url
+
+    DATABASES = {
+        "default": dj_database_url.config(conn_max_age=600, conn_health_checks=True)
+    }
+elif env("DB_ENGINE") == "postgres":
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
@@ -101,7 +107,7 @@ else:
         }
     }
 
-# Use OUR User model (accounts.User) instead of Django's default one.
+# Use user model (accounts.User) instead of Django's default one.
 AUTH_USER_MODEL = "accounts.User"
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -123,9 +129,22 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Django uses storages to choose where files live
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        if not DEBUG
+        else "django.contrib.staticfiles.storage.StaticFilesStorage"
+    },
+}
+if USE_CLOUDINARY:
+    # if cloudinary url is set, use cloudinary for uploaded files
+    STORAGES["default"] = {"BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage"}
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# ------------------------------------------------ Django REST Framework
+# Django REST Framework
 REST_FRAMEWORK = {
     # Every request is checked for a JWT token in the Authorization header.
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -178,14 +197,22 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
-# ------------------------------------------------------------------- CORS
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # in production list real origins instead
+# CORS
+CORS_ALLOWED_ORIGINS = DEBUG 
+CORS_ALLOWED_ORIGINS = [
+    o.strip().rstrip("/") for o in env("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()
+]
 
-# ------------------------------------------------------------------ Email
+# Email
 # Default: emails are PRINTED in your terminal (great for learning).
 # For real emails set EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
-# and the EMAIL_* variables.
+# and the EMAIL_* variables ---- this is handled by resend.
 EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+if env("RESEND_API_KEY"):
+    # Use resend.com to send real emails (see README for setup instructions).
+    EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+    INSTALLED_APPS += ["anymail"]
+    ANYMAIL = {"RESEND_API_KEY": env("RESEND_API_KEY")}
 EMAIL_HOST = env("EMAIL_HOST", "")
 EMAIL_PORT = int(env("EMAIL_PORT", "587"))
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
@@ -194,7 +221,7 @@ EMAIL_USE_TLS = True
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@realestate.local")
 
 # Base URL used inside emailed links (a frontend would normally own these).
-SITE_URL = env("SITE_URL", "http://127.0.0.1:8000")
+SITE_URL = env("SITE_URL") or env("RENDER_EXTERNAL_URL") or "http://127.0.0.1:8000"
 
 # If True, users cannot log in until they verify their email address.
 REQUIRE_EMAIL_VERIFICATION = env("REQUIRE_EMAIL_VERIFICATION", "False") == "True"

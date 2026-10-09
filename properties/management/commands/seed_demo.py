@@ -22,18 +22,19 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if not User.objects.filter(email="admin@example.com").exists():
+            username = "demo_admin" if User.objects.filter(username="demo_admin").exists() else "admin"
             User.objects.create_superuser("admin", "admin@example.com", "Admin#12345",
                                           is_email_verified=True)
         agent, created = User.objects.get_or_create(
             email="agent@example.com",
-            defaults={"username": "agent", "role": "agent", "is_email_verified": True})
+            defaults={"username": "demo_agent", "role": "agent", "is_email_verified": True})
         if created:
             agent.set_password("Agent#12345")
             agent.save()
         AgentProfile.objects.get_or_create(user=agent, defaults={
             "company_name": "Lagos Prime Realty", "license_number": "LPR-001", "status": "approved"})
         user, created = User.objects.get_or_create(
-            email="user@example.com", defaults={"username": "user", "is_email_verified": True})
+            email="user@example.com", defaults={"username": "demo_user", "is_email_verified": True})
         if created:
             user.set_password("User#12345")
             user.save()

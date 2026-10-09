@@ -5,6 +5,8 @@ right app. Every app has its own urls.py; we plug them in here.
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
+from django.http import JsonResponse
+from django.shortcuts import redirect
 from django.urls import include, path
 from drf_spectacular.views import (
     SpectacularAPIView,
@@ -12,7 +14,13 @@ from drf_spectacular.views import (
     SpectacularSwaggerView,
 )
 
+def health(request):
+    """Health check endpoint for uptime monitoring."""
+    return JsonResponse({"status": "ok"})
+
 urlpatterns = [
+    path("", lambda request: redirect("swagger-ui")),  # redirect root to swagger
+    path("health/", health, name="health"),  # health check endpoint for uptime monitoring
     path("admin/", admin.site.urls),
     # API endpoints
     path("api/auth/", include("accounts.urls")),
